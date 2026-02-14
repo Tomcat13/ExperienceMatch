@@ -47,6 +47,10 @@ def get_db_file():
 # test locally
 db_path = st.secrets["LOCAL_DB_PATH"]
 
+# connect to sqlite
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
 # ExperienceMatch!
 st.title("ExperienceMatch")
 
@@ -62,10 +66,6 @@ if not user_input:
         - Improved SQL queries
     """)
 else:
-    
-    # connect to sqlite
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
 
     # get all the data
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
