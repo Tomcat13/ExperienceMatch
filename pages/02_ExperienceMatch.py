@@ -7,12 +7,12 @@ import sqlite_vec
 from b2sdk.v2 import InMemoryAccountInfo, B2Api
 from sentence_transformers import SentenceTransformer
 
-# gotta do this so running locally works
 import sys
 import os
-parent_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from pages/
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
+# probably old, but will keep in case file systems change
+#parent_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from pages/
+#if parent_dir not in sys.path:
+#    sys.path.append(parent_dir)
 
 # custom imports
 from utils.support import process_query
@@ -42,10 +42,10 @@ def get_db_file():
 
 
 # get file from backblaze
-#db_path = get_db_file()
+db_path = get_db_file()
 
 # test locally
-db_path = st.secrets["LOCAL_DB_PATH"]
+#db_path = st.secrets["LOCAL_DB_PATH"]
 
 # connect to sqlite
 conn = sqlite3.connect(db_path)
