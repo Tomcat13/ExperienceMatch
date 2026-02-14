@@ -8,6 +8,13 @@ env/
 .secrets/
 secrets/
 
+# mac-os
+.DS_Store
+DS_Store
+
+# files created on runtime
+temp_data/
+
 # Python cache
 __pycache__/
 *.pyc

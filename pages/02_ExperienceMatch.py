@@ -1,9 +1,23 @@
+# imports
 import pandas as pd
+import numpy as np
 import streamlit as st
 import sqlite3
-import os
+import sqlite_vec
 from b2sdk.v2 import InMemoryAccountInfo, B2Api
+from sentence_transformers import SentenceTransformer
 
+# gotta do this so running locally works
+import sys
+import os
+parent_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from pages/
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+# custom imports
+from utils.support import process_query
+
+# set database constants
 B2_KEY_ID = st.secrets["B2_KEY_ID"]
 B2_APP_KEY = st.secrets["B2_APP_KEY"]
 BUCKET_NAME = "rag-resume-thomas-reedy"
@@ -28,114 +42,160 @@ def get_db_file():
 
 
 # get file from backblaze
-db_path = get_db_file()
+#db_path = get_db_file()
 
 # test locally
-#db_path = st.secrets["LOCAL_DB_PATH"]
+db_path = st.secrets["LOCAL_DB_PATH"]
 
-# connect to sqlite
-conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
-
-
-
+# ExperienceMatch!
 st.title("ExperienceMatch")
 
-# get all the data
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-tables = [t[0] for t in cursor.fetchall()]
+user_input = st.text_input("Match an Experience: ", key="input_box")
 
-if "entities" not in tables:
-    st.error("Error getting database.  Please try again or come back tomorrow.")
+# give examples to ask:
+if not user_input:
+    st.markdown(f"""
+        Example prompts to ask:
+        - Built ETL pipeline for NLP
+        - Trained a random forest model
+        - Designed a database schema
+        - Improved SQL queries
+    """)
 else:
-    # run main query
-    query = """
-        SELECT
-            c.entity_id,
-            c.chunk_type,
-            c.content,
-            r.*,
-            e.*
-        FROM chunks c
-        LEFT JOIN relations r ON r.from_id = c.entity_id
-        LEFT JOIN entities e ON e.id = r.to_id
-        WHERE 
-            c.id = 'athlete_crawler:description:0'
-            AND r.relation = 'part_of'
-    """
+    
+    # connect to sqlite
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-    cursor.execute(query)
-    results = cursor.fetchall()
-    columns = [description[0] for description in cursor.description]
+    # get all the data
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = [t[0] for t in cursor.fetchall()]
 
-    if results:
-        # for later... this should then go and loop through the results
-        # I'll likely make formatting requirements based on whether its a class project
-        # or a work experience etc.  This will be saved in another python file
-
-        st.write(f"Results for top {len(results)} experience matches.")
-        st.divider()
-
-        
-        # make the mix of company and title when available
-        if results[0][9]:
-            if results[0][8]:
-                st.subheader( str(results[0][9]) + ', ' + str(results[0][8]) )
-            else:
-                st.subheader( str(results[0][9]) )
-        else:
-            if results[0][8]:
-                st.subheader( results[0][8] )
-
-        # display project name
-        # all i have is id... might want to change this in the future
-        st.write(f"Project ID: {results[0][0]}")
-
-        # convert end date to present if not available
-        if str(results[0][12]):
-            end_date = str(results[0][12])
-        else:
-            end_date = 'present'
-        # only display the date if there's a start date
-        if results[0][11]:
-            st.write(f"Date Range:  " + str(results[0][11]) +
-                        " - " + str(end_date)
-                )
-
-        # show url if present
-        if results[0][13]:
-            st.write(f"URL: " + str(results[0][13]))
-
-        # write the part that matched
-        #st.markdown(f"""
-        #    Matched {results[0][1].capitalize()}:
-        #    - {results[0][2]}
-        #""")
-
-        # now, find the other descriptors that matched
-        sub_query = "SELECT chunk_type, content FROM chunks WHERE entity_id = 'athlete_crawler' ORDER BY chunk_type ASC"
-        cursor.execute(sub_query)
-        sub_results = cursor.fetchall()
-
-        # write all other descriptions and results
-        actions = [row for row in sub_results if row[0] == 'description'] #and row[1] != results[0][2]]
-        impacts = [row for row in sub_results if row[0] == 'outcomes'] #and row[1] != results[0][2]]
-
-        if actions:
-            st.write("Actions:")
-            for action in actions:
-                st.markdown(f"- {action[1]}")
-        if impacts:
-            st.write("Impacts:")
-            for impact in impacts:
-                st.markdown(f"- {impact[1]}")
-
-
-        st.divider()
-
-        #df = pd.DataFrame(results, columns=columns)
-        #st.dataframe(df)
+    if "entities" not in tables:
+        st.error("Error getting database.  Please try again or come back tomorrow.")
     else:
-        st.write("No results found in the database.")
+        # get all the embedding stuff ready
+        EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
+        model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
 
-conn.close()
+        # return most similar experiences
+        results = process_query(user_input, cursor)
+
+        if results:
+            # I'll likely make formatting requirements based on whether its a class project
+            # or a work experience etc.  This will be saved in another python file
+
+            # get total results
+            unique_projects = set(result[0] for result in results)
+            st.write(f"Showing results for top {min( 3, len(unique_projects) )} experience matches.")
+            
+            st.divider()
+
+            # limit outputs
+            projects = []
+            output_increment = 0
+
+            # loop through all results
+            for i, result in enumerate(results):
+
+                # ensure project isn't repeated
+                if results[i][0] in projects:
+                    continue
+                else:
+                    projects.append(results[i][0])
+                    output_increment += 1
+
+                # get max of three outputs
+                if output_increment > 3:
+                    break
+
+                # make the mix of company and title when available
+                if results[i][9]:
+                    if results[i][8]:
+                        st.subheader( str(results[i][9]) + ', ' + str(results[i][8]) )
+                    else:
+                        st.subheader( str(results[i][9]) )
+                else:
+                    if results[i][8]:
+                        st.subheader( results[i][8] )
+
+                # display project name
+                # all i have is id... might want to change this in the future
+                st.write(f"Project ID: {results[i][0]}")
+
+                # show the similarity score
+                st.write(f"Similarity Score: {results[i][-1]:.2f}")
+
+                # convert end date to present if not available
+                if results[i][12]:
+                    end_date = str(results[i][12])
+                else:
+                    end_date = 'present'
+                # only display the date if there's a start date
+                if results[i][11]:
+                    st.write(f"Date Range:  " + str(results[i][11]) +
+                                " - " + str(end_date)
+                        )
+
+                # show url if present
+                if results[i][13]:
+                    st.write(f"URL: " + str(results[i][13]))
+
+                # now, find the other descriptors that matched
+                sub_query = f"SELECT chunk_type, content FROM chunks WHERE entity_id = '{results[i][3]}' "
+                cursor.execute(sub_query)
+                sub_results = cursor.fetchall()
+
+                # write all other descriptions and results
+                actions = [row for row in sub_results if row[0] == 'description']
+                impacts = [row for row in sub_results if row[0] == 'outcomes']
+
+                if actions:
+                    st.write("Actions:")
+                    for action in actions:
+                        st.markdown(f"- {action[1]}")
+                if impacts:
+                    st.write("Impacts:")
+                    for impact in impacts:
+                        st.markdown(f"- {impact[1]}")
+
+                # get skills associated to the project
+                sub_query = f"""
+                    SELECT 
+                        e.title,
+                        e.id,
+                        r.*
+                    FROM relations r
+                    LEFT JOIN entities e ON r.to_id = e.id
+                    WHERE
+                        r.from_id = '{results[i][3]}'
+                        AND r.relation = 'uses'
+                        AND e.id = r.to_id
+                """
+                cursor.execute(sub_query)
+                skills = cursor.fetchall()
+
+                if skills:
+                    st.write("Skills and Tools Used:")
+                    list_skills = [skill[0] for skill in skills]
+                    skill_string = ', '.join(list_skills)
+                    st.markdown(f"- {skill_string}")
+
+                # finish with experience section
+                st.divider()
+
+        else:
+            st.write("No results found in the database for that experience.")
+            st.write("Please try rephrasing your prompt or try to match a different experience.")
+            st.write("\n")
+            st.markdown(f"""
+                    Example prompts to ask:
+                    - Trained a random forest model
+                    - Built ETL pipeline for NLP
+                    - Designed a database schema
+                    - Improved SQL queries
+                """)
+
+    conn.close()
