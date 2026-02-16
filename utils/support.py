@@ -29,12 +29,27 @@ def process_query(user_input, cursor, thresh=0.25, top_k=6):
                 c.content,
                 r.*,
                 e.*,
+                p.id as project_id,
+                p.role as project_name,
                 c.id as chunk_id_,
                 ce.embedding
+                
+            -- get main data from the chunks
             FROM chunks c
+            
+            -- first join to get the relations
             LEFT JOIN relations r ON r.from_id = c.entity_id
-            LEFT JOIN entities e ON e.id = r.from_id
+            
+            -- get the entity that does the relating to the chunk
+            LEFT JOIN entities e ON e.id = r.to_id
+            
+            -- get the project that relates to the chunk
+            LEFT JOIN projects p on p.id = c.entity_id
+            
+            -- get the chunk embeddings for comparison
             LEFT JOIN chunk_embeddings ce ON c.id = ce.chunk_id
+            
+            -- make sure the realtion is part of (filters out skills)
             WHERE r.relation = 'part_of'
         """
     cursor.execute(query)

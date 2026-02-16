@@ -40,7 +40,6 @@ def get_db_file():
     return local_path
 
 
-
 # get file from backblaze
 db_path = get_db_file()
 
@@ -64,14 +63,19 @@ if not user_input:
         - Trained a random forest model
         - Designed a database schema
         - Improved SQL queries
+        \n
+        For more inspiration, check out my
+        [linkedin](https://www.linkedin.com/in/thomas-reedy-151363190/)
+        or [sports analytics github](https://github.com/Tomcat13/SportsAnalytics)
     """)
+
 else:
 
     # get all the data
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tables = [t[0] for t in cursor.fetchall()]
 
-    if "entities" not in tables:
+    if "entities" not in tables: 
         st.error("Error getting database.  Please try again or come back tomorrow.")
     else:
         # get all the embedding stuff ready
@@ -79,6 +83,7 @@ else:
         model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
+
 
         # return most similar experiences
         results = process_query(user_input, cursor)
@@ -98,13 +103,16 @@ else:
             output_increment = 0
 
             # loop through all results
-            for i, result in enumerate(results):
+            for result in results:
+
+                # for debugging
+                #st.write(result)
 
                 # ensure project isn't repeated
-                if results[i][0] in projects:
+                if result[0] in projects:
                     continue
                 else:
-                    projects.append(results[i][0])
+                    projects.append(result[0])
                     output_increment += 1
 
                 # get max of three outputs
@@ -112,39 +120,43 @@ else:
                     break
 
                 # make the mix of company and title when available
-                if results[i][9]:
-                    if results[i][8]:
-                        st.subheader( str(results[i][9]) + ', ' + str(results[i][8]) )
-                    else:
-                        st.subheader( str(results[i][9]) )
+                if result[7] == 'course':
+                    st.header(str(result[6]) + ' - ' + str(result[8]))
                 else:
-                    if results[i][8]:
-                        st.subheader( results[i][8] )
-
-                # display project name
-                # all i have is id... might want to change this in the future
-                st.write(f"Project ID: {results[i][0]}")
-
-                # show the similarity score
-                st.write(f"Similarity Score: {results[i][-1]:.2f}")
+                    if result[9]:
+                        if result[8]:
+                            st.header( str(result[9]) + ', ' + str(result[8]) )
+                        else:
+                            st.header( str(result[9]) )
+                    elif result[8]:
+                        st.header( result[8] )
 
                 # convert end date to present if not available
-                if results[i][12]:
-                    end_date = str(results[i][12])
+                if result[12]:
+                    end_date = str(result[12])
                 else:
                     end_date = 'present'
-                # only display the date if there's a start date
-                if results[i][11]:
-                    st.write(f"Date Range:  " + str(results[i][11]) +
+                # only display the job's start date if there's a start date
+                if result[11]:
+                    st.write(f"Date Range:  " + str(result[11]) +
                                 " - " + str(end_date)
-                        )
+                            )
+                # display project name
+                # all i have is id... might want to change this in the future
+                #st.write(f"Project ID: {results[i][0]}")
+                st.subheader(result[-3])
+
+                # show the similarity score
+                st.write(f"Similarity Score: {result[-1]:.2f}")
+
+                # later, can add specific dates for the project here
 
                 # show url if present
-                if results[i][13]:
-                    st.write(f"URL: " + str(results[i][13]))
+                if result[13]:
+                    st.write(f"URL: " + str(result[13]))
 
                 # now, find the other descriptors that matched
-                sub_query = f"SELECT chunk_type, content FROM chunks WHERE entity_id = '{results[i][3]}' "
+                sub_query = f"SELECT chunk_type, content FROM chunks WHERE entity_id = '{result[3]}' "
                 cursor.execute(sub_query)
                 sub_results = cursor.fetchall()
 
@@ -170,7 +182,7 @@ else:
                     FROM relations r
                     LEFT JOIN entities e ON r.to_id = e.id
                     WHERE
-                        r.from_id = '{results[i][3]}'
+                        r.from_id = '{result[3]}'
                         AND r.relation = 'uses'
                         AND e.id = r.to_id
                 """

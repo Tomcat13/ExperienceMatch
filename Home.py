@@ -14,12 +14,16 @@ if st.button("Use ExperienceMatch"):
 
 if st.button("Project Background"):
     st.switch_page("pages/01_Background.py")
+
+if st.button("How it Works"):
+    st.switch_page("pages/03_HowItWorks.py")
     
 st.markdown("""
     \n
     More to come!  If you have any recommendations,
     questions, or want to chat, please email me at reedyt22@gmail.com or message me 
-    on [linkedin](https://www.linkedin.com/in/thomas-reedy-151363190/).
+    on [linkedin](https://www.linkedin.com/in/thomas-reedy-151363190/).  You can search
+    for more projects on my [github](https://github.com/Tomcat13/SportsAnalytics).
     \n
-    &emsp;\- Thomas Reedy
+       \- Thomas Reedy
 """)
