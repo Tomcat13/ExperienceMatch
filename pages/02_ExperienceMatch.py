@@ -5,6 +5,7 @@ import streamlit as st
 import sqlite3
 import sqlite_vec
 from b2sdk.v2 import InMemoryAccountInfo, B2Api
+import boto3
 from sentence_transformers import SentenceTransformer
 
 import sys
@@ -20,6 +21,7 @@ from utils.support import process_query
 # set database constants
 B2_KEY_ID = st.secrets["B2_KEY_ID"]
 B2_APP_KEY = st.secrets["B2_APP_KEY"]
+B2_ENDPOINT = st.secrets["B2_ENDPOINT"]
 BUCKET_NAME = "rag-resume-thomas-reedy"
 DB_FILE_NAME = "resume.db"
 
@@ -28,6 +30,7 @@ b2_api = B2Api(info)
 b2_api.authorize_account("production", B2_KEY_ID, B2_APP_KEY)
 bucket = b2_api.get_bucket_by_name(BUCKET_NAME)
 
+# OLD APPROACH
 # download db and cache it
 @st.cache_data(show_spinner=True)
 def get_db_file():
@@ -39,15 +42,63 @@ def get_db_file():
 
     return local_path
 
+# NEW APPROACH
+@st.cache_resource
+def download_db():
+    session = boto3.session.Session()
+
+    s3 = session.client(
+        service_name='s3',
+        endpoint_url=st.secrets["B2_ENDPOINT"],
+        aws_access_key_id=st.secrets["B2_KEY_ID"],
+        aws_secret_access_key=st.secrets["B2_APP_KEY"],
+    )
+
+    local_path = "temp_data/resume.db"
+
+    # Download once per container lifecycle
+    s3.download_file(
+        BUCKET_NAME,
+        DB_FILE_NAME,
+        local_path
+    )
+
+    return local_path
+
+# load db into memory
+
+@st.cache_resource
+def load_db_into_memory():
+    local_path = download_db()
+
+    disk_conn = sqlite3.connect(local_path)
+    #memory_conn = sqlite3.connect(":memory:")
+    memory_conn = sqlite3.connect(
+        ":memory:",
+        check_same_thread=False
+    )
+
+    # Copy entire DB into RAM
+    disk_conn.backup(memory_conn)
+    disk_conn.close()
+
+    # Optional safety
+    memory_conn.execute("PRAGMA query_only = ON;")
+
+    return memory_conn
+
 
 # get file from backblaze
-db_path = get_db_file()
+#db_path = get_db_file()
 
 # test locally
 #db_path = st.secrets["LOCAL_DB_PATH"]
 
 # connect to sqlite
-conn = sqlite3.connect(db_path)
+#conn = sqlite3.connect(db_path)
+
+# new way to connect
+conn = load_db_into_memory()
 cursor = conn.cursor()
 
 # ExperienceMatch!
@@ -210,4 +261,4 @@ else:
                     - Improved SQL queries
                 """)
 
-    conn.close()
+    #conn.close()
