@@ -30,7 +30,7 @@ b2_api = B2Api(info)
 b2_api.authorize_account("production", B2_KEY_ID, B2_APP_KEY)
 bucket = b2_api.get_bucket_by_name(BUCKET_NAME)
 
-# OLD APPROACH
+# OLD APPROACH... which I'm trying again bc the new way broke
 # download db and cache it
 @st.cache_data(show_spinner=True)
 def get_db_file():
@@ -66,7 +66,6 @@ def download_db():
     return local_path
 
 # load db into memory
-
 @st.cache_resource
 def load_db_into_memory():
     local_path = download_db()
@@ -89,16 +88,17 @@ def load_db_into_memory():
 
 
 # get file from backblaze
-#db_path = get_db_file()
+db_path = get_db_file()
 
 # test locally
 #db_path = st.secrets["LOCAL_DB_PATH"]
 
-# connect to sqlite
-#conn = sqlite3.connect(db_path)
+# connect to sqlite -- old way
+conn = sqlite3.connect(db_path)
 
 # new way to connect
-conn = load_db_into_memory()
+#conn = load_db_into_memory()
+
 cursor = conn.cursor()
 
 # ExperienceMatch!
